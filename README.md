@@ -22,11 +22,13 @@ https://www.instagram.com/dreamlandofficial_1?igsh=NTZvcHRkNjlhYzhp
 
 ## Features
 
+- **Web UI**: Beautiful, minimal web interface to interact with the API
 - **Instagram Automation**: Automatically log in, post photos, like posts, and leave thoughtful comments.
 - **Twitter Automation**: Automatically tweet, retweet, and like tweets.
 - **AI-Powered Content Generation**: Use Google Generative AI to create engaging captions and comments for Instagram and Twitter.
 - **Proxy Support**: Use proxies to manage multiple accounts and avoid rate limits.
 - **Cookie Management**: Save and load cookies to maintain sessions across restarts.
+- **RESTful API**: Full API access for programmatic control
 
 **Upcoming Features:**
 
@@ -105,11 +107,41 @@ GitHub automation is planned for future development.
 
 ## Usage
 
-1. **Run the agent**:
+### Web UI (Recommended)
+
+1. **Build the frontend** (first time only):
+   ```sh
+   npm run build:frontend
+   ```
+
+2. **Start the server**:
    ```sh
    npm start
    ```
-   Note: The specific platform (Instagram, Twitter) and actions performed by the agent are typically configured through environment variables in the `.env` file, or by selections made if the application prompts for choices at runtime.
+
+3. **Open your browser**:
+   Navigate to `http://localhost:3000` and use the web interface to:
+   - Login with Instagram credentials
+   - Interact with posts
+   - Send direct messages
+   - Scrape followers from target accounts
+   - Manage cookies
+
+### API Access
+
+The agent also exposes a RESTful API at `http://localhost:3000/api` for programmatic access. See `src/routes/api.ts` for available endpoints.
+
+### Development
+
+**Run frontend in dev mode** (with hot reload):
+```sh
+npm run dev:frontend
+```
+
+**Build all** (frontend + backend):
+```sh
+npm run build:all
+```
 
 ## Project Structure
 

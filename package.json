@@ -7,7 +7,10 @@
     "postbuild": "copyfiles -u 3 src/Agent/characters/*.json build/Agent/characters",
     "train:link": "tsc && node build/Agent/training/WebsiteScraping.js",
     "train:audio": "tsc && node build/Agent/training/TrainWithAudio.js",
-    "train:youtube": "tsc && node build/Agent/training/youtubeURL.js"
+    "train:youtube": "tsc && node build/Agent/training/youtubeURL.js",
+    "build:frontend": "cd frontend && npm run build",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:all": "npm run build:frontend && npx tsc && npm run postbuild"
   },
   "keywords": [],
   "author": "",
