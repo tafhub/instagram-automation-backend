@@ -12,6 +12,8 @@ import { getInstagramCommentSchema } from "../../Agent/schema";
 import readline from "readline";
 import fs from "fs/promises";
 import { getShouldExitInteractions } from '../../api/agent';
+import { TargetAccounts } from '../../types/targetAccounts';
+import { Comment } from '../../types/comment';
 
 // Add stealth plugin to puppeteer
 puppeteerExtra.use(StealthPlugin());
@@ -262,6 +264,19 @@ export class IgClient {
 
     async interactWithPosts() {
         if (!this.page) throw new Error("Page not initialized");
+        
+        // Get target accounts from database
+        const targetAccountsDoc = await TargetAccounts.findOne({ username: this.username });
+        const targetAccounts = targetAccountsDoc?.targetAccounts || [];
+        
+        if (targetAccounts.length === 0) {
+            logger.warn("No target accounts found. Please set target accounts first.");
+            return;
+        }
+        
+        logger.info(`Auto-commenting will only engage with posts from: ${targetAccounts.join(', ')}`);
+        console.log(`DEBUG: Loaded ${targetAccounts.length} target accounts: [${targetAccounts.join(', ')}]`);
+        
         let postIndex = 1; // Start with the first post
         const maxPosts = 20; // Limit to prevent infinite scrolling
         const page = this.page;
@@ -316,12 +331,117 @@ export class IgClient {
                     );
                     caption = expandedCaption;
                 }
+                // Check if post author is in target accounts
+                const postAuthor = await page.evaluate((selector) => {
+                    const postElement = document.querySelector(selector);
+                    if (!postElement) return null;
+                    
+                    // Multiple strategies to find the post author
+                    const strategies = [
+                        // Strategy 1: Look for username in post header (most common)
+                        () => {
+                            const headerLinks = postElement.querySelectorAll('header a[href*="/"]');
+                            for (const link of headerLinks) {
+                                const href = link.getAttribute('href');
+                                if (href && href.startsWith('/') && href !== '/') {
+                                    const username = href.replace('/', '').split('/')[0];
+                                    if (username && !['explore', 'reels', 'accounts', 'legal', 'p', 'reel', 'web', 'direct', 'stories', 'tagged'].includes(username)) {
+                                        return username;
+                                    }
+                                }
+                            }
+                            return null;
+                        },
+                        
+                        // Strategy 2: Look for username in the first few links
+                        () => {
+                            const allLinks = postElement.querySelectorAll('a[href*="/"]');
+                            for (let i = 0; i < Math.min(5, allLinks.length); i++) {
+                                const link = allLinks[i];
+                                const href = link.getAttribute('href');
+                                if (href && href.startsWith('/') && href !== '/') {
+                                    const username = href.replace('/', '').split('/')[0];
+                                    if (username && !['explore', 'reels', 'accounts', 'legal', 'p', 'reel', 'web', 'direct', 'stories', 'tagged'].includes(username)) {
+                                        return username;
+                                    }
+                                }
+                            }
+                            return null;
+                        },
+                        
+                        // Strategy 3: Look for @username in text content
+                        () => {
+                            const textContent = postElement.textContent || '';
+                            const match = textContent.match(/@([a-zA-Z0-9._]+)/);
+                            if (match && match[1]) {
+                                return match[1];
+                            }
+                            return null;
+                        }
+                    ];
+                    
+                    // Try each strategy
+                    for (const strategy of strategies) {
+                        const username = strategy();
+                        if (username) {
+                            console.log(`Found post author using strategy: ${username}`);
+                            return username;
+                        }
+                    }
+                    
+                    console.log('Could not find post author with any strategy');
+                    return null;
+                }, postSelector);
+
+                if (!postAuthor) {
+                    console.log(`Could not determine post author for post ${postIndex}, skipping...`);
+                    postIndex++;
+                    continue;
+                }
+
+                // Check if post author is in our target accounts
+                console.log(`DEBUG: Post ${postIndex} author: @${postAuthor}`);
+                console.log(`DEBUG: Target accounts: [${targetAccounts.join(', ')}]`);
+                console.log(`DEBUG: Is @${postAuthor} in target accounts? ${targetAccounts.includes(postAuthor)}`);
+                
+                if (!targetAccounts.includes(postAuthor)) {
+                    console.log(`❌ Post ${postIndex} is from @${postAuthor} (NOT in target accounts), skipping...`);
+                    postIndex++;
+                    continue;
+                }
+
+                console.log(`✅ Post ${postIndex} is from @${postAuthor} (TARGET ACCOUNT), proceeding to comment...`);
+
                 // Comment on the post
                 const commentBoxSelector = `${postSelector} textarea`;
                 const commentBox = await page.$(commentBoxSelector);
                 if (commentBox) {
-                    console.log(`Commenting on post ${postIndex}...`);
-                    const prompt = `human-like Instagram comment based on to the following post: "${caption}". make sure the reply\n            Matchs the tone of the caption (casual, funny, serious, or sarcastic).\n            Sound organic—avoid robotic phrasing, overly perfect grammar, or anything that feels AI-generated.\n            Use relatable language, including light slang, emojis (if appropriate), and subtle imperfections like minor typos or abbreviations (e.g., 'lol' or 'omg').\n            If the caption is humorous or sarcastic, play along without overexplaining the joke.\n            If the post is serious (e.g., personal struggles, activism), respond with empathy and depth.\n            Avoid generic praise ('Great post!'); instead, react specifically to the content (e.g., 'The way you called out pineapple pizza haters 😂👏').\n            *Keep it concise (1-2 sentences max) and compliant with Instagram's guidelines (no spam, harassment, etc.).*`;
+                    console.log(`Commenting on post ${postIndex} from @${postAuthor}...`);
+                    const prompt = `Write a simple, natural Instagram comment for this post from @${postAuthor}: "${caption}"
+
+            RULES:
+            - Comment like a real person, not a company
+            - Be genuine and relatable
+            - Keep it short (1 sentence max)
+            - React to what they actually posted
+            - Use casual, friendly language
+            - NO corporate speak, NO "we/our team/company" language
+            - NO sales pitches or follow requests
+            - Just be human and authentic
+
+            EXAMPLES:
+            - Post about coffee: "This looks amazing! ☕"
+            - Post about workout: "Love this energy! 💪"
+            - Post about travel: "So jealous! Where is this?"
+            - Post about food: "Yum! Recipe please? 👀"
+            - Post about work: "This is so true!"
+            - Post about motivation: "Needed this today 🙌"
+            - Post about tech: "This is really cool!"
+            - Post about business: "Great point!"
+            - Post about life: "This hits different ✨"
+            - Post about success: "Congrats! Well deserved 🎉"
+
+            Write ONE simple, natural comment that a real person would leave.`;
                     const schema = getInstagramCommentSchema();
                     const result = await runAgent(schema, prompt);
                     const comment = (result[0]?.comment ?? "") as string;
@@ -342,6 +462,33 @@ export class IgClient {
                         console.log(`Posting comment on post ${postIndex}...`);
                         await (postButtonElement as puppeteer.ElementHandle<Element>).click();
                         console.log(`Comment posted on post ${postIndex}.`);
+                        
+                        // Save comment to database
+                        try {
+                            const currentUrl = page.url();
+                            const commentData = {
+                                username: this.username,
+                                postUrl: currentUrl,
+                                postCaption: caption,
+                                commentText: comment,
+                                postOwner: postAuthor,
+                                timestamp: new Date(),
+                                isDeleted: false
+                            };
+                            
+                            console.log(`Saving comment to database:`, {
+                                username: this.username,
+                                postOwner: postAuthor,
+                                commentLength: comment.length,
+                                captionLength: caption.length
+                            });
+                            
+                            const savedComment = await Comment.create(commentData);
+                            console.log(`✓ Comment saved to database for post ${postIndex}, ID: ${savedComment._id}`);
+                        } catch (dbError) {
+                            console.error(`❌ Failed to save comment to database:`, dbError);
+                        }
+                        
                         // Wait for comment to be posted and UI to update
                         await delay(2000);
                     } else {
@@ -392,20 +539,55 @@ export class IgClient {
             const followers: string[] = [];
             let previousHeight = 0;
             let currentHeight = 0;
-            maxFollowers = maxFollowers + 4;
+            let noChangeCount = 0; // Track how many times height hasn't changed
+            const maxNoChangeAttempts = 3; // Try 3 times before giving up
+            
             // Scroll and collect followers until we reach the desired amount or can't scroll anymore
-            console.log(maxFollowers);
+            console.log(`Target followers to scrape: ${maxFollowers}`);
             while (followers.length < maxFollowers) {
                 // Get all follower links in the current view
                 const newFollowers = await page.evaluate(() => {
-                    const followerElements =
-                        document.querySelectorAll('div a[role="link"]');
-                    return Array.from(followerElements)
-                        .map((element) => element.getAttribute("href"))
-                        .filter(
-                            (href): href is string => href !== null && href.startsWith("/")
-                        )
-                        .map((href) => href.substring(1)); // Remove leading slash
+                    const dialog = document.querySelector('div[role="dialog"]');
+                    if (!dialog) {
+                        console.log('DEBUG: No dialog found!');
+                        return [];
+                    }
+                    
+                    // Find all links within the dialog
+                    const followerElements = dialog.querySelectorAll('a[href]');
+                    console.log(`DEBUG: Found ${followerElements.length} links in dialog`);
+                    
+                    const usernames = new Set<string>();
+                    
+                    followerElements.forEach((element) => {
+                        const href = element.getAttribute("href");
+                        if (!href) return;
+                        
+                        console.log(`DEBUG: Checking href: ${href}`);
+                        
+                        // Parse href to extract username
+                        // Instagram following/followers use format: /username/ or /username
+                        if (href.startsWith('/') && href !== '/') {
+                            const parts = href.split('/').filter(p => p);
+                            
+                            // Only accept single-segment paths (just username)
+                            if (parts.length === 1) {
+                                const username = parts[0];
+                                // Filter out known non-username paths
+                                const excludedPaths = ['explore', 'reels', 'accounts', 'legal', 'p', 'reel', 'web', 'direct', 'stories'];
+                                if (!excludedPaths.includes(username) && 
+                                    !username.includes('?') && 
+                                    !username.includes('=')) {
+                                    console.log(`DEBUG: Valid username found: ${username}`);
+                                    usernames.add(username);
+                                }
+                            }
+                        }
+                    });
+                    
+                    const result = Array.from(usernames);
+                    console.log(`DEBUG: Returning ${result.length} usernames:`, result.slice(0, 5));
+                    return result;
                 });
 
                 // Add new unique followers to our list
@@ -416,36 +598,538 @@ export class IgClient {
                     }
                 }
 
-                // Scroll the followers modal
-                await page.evaluate(() => {
+                // Scroll the followers modal - find the scrollable container
+                const scrollInfo = await page.evaluate(() => {
                     const dialog = document.querySelector('div[role="dialog"]');
-                    if (dialog) {
+                    if (!dialog) return { success: false, message: 'No dialog found' };
+                    
+                    // Find all divs inside the dialog and check which ones are scrollable
+                    const allDivs = dialog.querySelectorAll('div');
+                    let scrollableDiv: HTMLElement | null = null;
+                    
+                    for (const div of Array.from(allDivs)) {
+                        const style = window.getComputedStyle(div);
+                        const overflowY = style.overflowY;
+                        const scrollHeight = div.scrollHeight;
+                        const clientHeight = div.clientHeight;
+                        
+                        // Check if this div is scrollable
+                        if ((overflowY === 'auto' || overflowY === 'scroll') && scrollHeight > clientHeight) {
+                            scrollableDiv = div as HTMLElement;
+                            break;
+                        }
+                    }
+                    
+                    if (scrollableDiv) {
+                        const beforeScroll = scrollableDiv.scrollTop;
+                        scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
+                        const afterScroll = scrollableDiv.scrollTop;
+                        
+                        return {
+                            success: true,
+                            message: 'Scrolled scrollableDiv',
+                            scrollHeight: scrollableDiv.scrollHeight,
+                            clientHeight: scrollableDiv.clientHeight,
+                            scrollTop: afterScroll,
+                            didScroll: afterScroll > beforeScroll
+                        };
+                    } else {
+                        // Fallback: try scrolling dialog
                         dialog.scrollTop = dialog.scrollHeight;
+                        return {
+                            success: true,
+                            message: 'Scrolled dialog (fallback)',
+                            scrollHeight: dialog.scrollHeight,
+                            clientHeight: dialog.clientHeight,
+                            scrollTop: dialog.scrollTop,
+                            didScroll: false
+                        };
                     }
                 });
+                
+                console.log(`DEBUG: Scroll info:`, JSON.stringify(scrollInfo, null, 2));
 
-                // Wait for potential new content to load
-                await delay(1000);
+                // Wait longer for Instagram to load more content
+                await delay(2000);
 
-                // Check if we've reached the bottom
-                currentHeight = await page.evaluate(() => {
-                    const dialog = document.querySelector('div[role="dialog"]');
-                    return dialog ? dialog.scrollHeight : 0;
-                });
+                // Get the current scroll height
+                currentHeight = scrollInfo.scrollHeight || 0;
+                
+                console.log(`DEBUG: Previous height: ${previousHeight}, Current height: ${currentHeight}`);
 
                 if (currentHeight === previousHeight) {
-                    console.log("Reached the end of followers list");
-                    break;
+                    noChangeCount++;
+                    console.log(`Height unchanged (${noChangeCount}/${maxNoChangeAttempts}). Waiting for more content...`);
+                    
+                    if (noChangeCount >= maxNoChangeAttempts) {
+                        console.log("Reached the end of followers list after multiple attempts");
+                        break;
+                    }
+                    
+                    // Wait extra time for Instagram to load more data
+                    await delay(3000);
+                } else {
+                    noChangeCount = 0; // Reset counter when height changes
+                    previousHeight = currentHeight;
                 }
-
-                previousHeight = currentHeight;
             }
 
-            console.log(`Successfully scraped ${followers.length - 4} followers`);
-            return followers.slice(4, maxFollowers);
+            console.log(`Successfully scraped ${followers.length} followers`);
+            return followers;
         } catch (error) {
             console.error(`Error scraping followers for ${targetAccount}:`, error);
             throw error;
+        }
+    }
+
+    async scrapeFollowing(maxFollowing: number) {
+        if (!this.page) throw new Error("Page not initialized");
+        const page = this.page;
+        try {
+            // Use the username from login credentials - this is the most reliable
+            // The username is set during initialization/login
+            const targetUsername = this.username;
+            console.log(`DEBUG: Using logged-in username: ${targetUsername}`);
+            
+            // Navigate to the profile page first
+            await page.goto(`https://www.instagram.com/${targetUsername}/`, {
+                waitUntil: "networkidle2",
+            });
+            console.log(`Navigated to profile: ${page.url()}`);
+            await delay(2000);
+
+            // Find and click the "following" link to open the modal
+            console.log('DEBUG: Looking for following button...');
+            const followingClicked = await page.evaluate(() => {
+                // Look for link with "following" text that contains the count
+                const links = Array.from(document.querySelectorAll('a[href*="/following"]'));
+                for (const link of links) {
+                    const text = link.textContent?.toLowerCase();
+                    if (text && text.includes('following')) {
+                        console.log(`Found following link: ${link.getAttribute('href')}`);
+                        (link as HTMLElement).click();
+                        return true;
+                    }
+                }
+                return false;
+            });
+            
+            if (!followingClicked) {
+                console.log('DEBUG: Following button not found, taking screenshot...');
+                await page.screenshot({ path: 'debug-profile-page.png' });
+                throw new Error('Following button not found on profile');
+            }
+            
+            console.log('DEBUG: Clicked following button, waiting for modal...');
+            await delay(2000);
+
+            // Wait for the following modal to load
+            try {
+                await page.waitForSelector('div[role="dialog"]', { timeout: 5000 });
+                console.log("Following modal loaded");
+            } catch {
+                console.log('DEBUG: Modal did not appear, taking screenshot...');
+                await page.screenshot({ path: 'debug-no-modal.png' });
+                throw new Error('Following modal did not appear after clicking');
+            }
+
+            // Take a screenshot first
+            await page.screenshot({ path: 'debug-following-modal.png', fullPage: false });
+            console.log('DEBUG: Screenshot saved to debug-following-modal.png');
+
+            // Debug: Inspect the dialog HTML structure
+            const dialogInfo = await page.evaluate(() => {
+                // Try multiple possible selectors
+                const dialog1 = document.querySelector('div[role="dialog"]');
+                const dialog2 = document.querySelector('[role="dialog"]');
+                const dialog3 = document.querySelector('div._aano'); // Instagram sometimes uses this class
+                
+                const dialog = dialog1 || dialog2 || dialog3;
+                
+                if (!dialog) {
+                    // If no dialog found, let's see what's on the page
+                    const allLinks = document.querySelectorAll('a[href]');
+                    const sampleAllLinks = Array.from(allLinks).slice(0, 20).map(a => ({
+                        href: a.getAttribute('href'),
+                        text: a.textContent?.substring(0, 30),
+                        classes: a.className
+                    }));
+                    
+                    return { 
+                        found: false,
+                        totalLinksOnPage: allLinks.length,
+                        sampleAllLinks,
+                        bodyHTML: document.body.innerHTML.substring(0, 1000)
+                    };
+                }
+                
+                const allLinks = dialog.querySelectorAll('a[href]');
+                const sampleLinks = Array.from(allLinks).slice(0, 10).map(a => ({
+                    href: a.getAttribute('href'),
+                    text: a.textContent?.substring(0, 50),
+                    hasTitle: !!a.querySelector('span[title]'),
+                    title: a.querySelector('span[title]')?.getAttribute('title')
+                }));
+                
+                return {
+                    found: true,
+                    selectorUsed: dialog1 ? 'div[role="dialog"]' : dialog2 ? '[role="dialog"]' : 'div._aano',
+                    totalLinks: allLinks.length,
+                    sampleLinks,
+                    dialogHTML: dialog.innerHTML.substring(0, 500)
+                };
+            });
+            
+            console.log('DEBUG: Dialog structure:', JSON.stringify(dialogInfo, null, 2));
+
+            const following: string[] = [];
+            let previousHeight = 0;
+            let currentHeight = 0;
+            let noChangeCount = 0; // Track how many times height hasn't changed
+            const maxNoChangeAttempts = 3; // Try 3 times before giving up
+            
+            // Scroll and collect following until we reach the desired amount or can't scroll anymore
+            console.log(`Target following to scrape: ${maxFollowing}`);
+            while (following.length < maxFollowing) {
+                // Get all following links in the current view
+                const newFollowing = await page.evaluate(() => {
+                    const dialog = document.querySelector('div[role="dialog"]');
+                    if (!dialog) {
+                        console.log('DEBUG: No dialog found!');
+                        return [];
+                    }
+                    
+                    // Find all links within the dialog
+                    const followingElements = dialog.querySelectorAll('a[href]');
+                    console.log(`DEBUG: Found ${followingElements.length} links in dialog`);
+                    
+                    const usernames = new Set<string>();
+                    
+                    followingElements.forEach((element) => {
+                        const href = element.getAttribute("href");
+                        if (!href) return;
+                        
+                        console.log(`DEBUG: Checking href: ${href}`);
+                        
+                        // Parse href to extract username
+                        // Instagram following/followers use format: /username/ or /username
+                        if (href.startsWith('/') && href !== '/') {
+                            const parts = href.split('/').filter(p => p);
+                            
+                            // Only accept single-segment paths (just username)
+                            if (parts.length === 1) {
+                                const username = parts[0];
+                                // Filter out known non-username paths
+                                const excludedPaths = ['explore', 'reels', 'accounts', 'legal', 'p', 'reel', 'web', 'direct', 'stories'];
+                                if (!excludedPaths.includes(username) && 
+                                    !username.includes('?') && 
+                                    !username.includes('=')) {
+                                    console.log(`DEBUG: Valid username found: ${username}`);
+                                    usernames.add(username);
+                                }
+                            }
+                        }
+                    });
+                    
+                    const result = Array.from(usernames);
+                    console.log(`DEBUG: Returning ${result.length} usernames:`, result.slice(0, 5));
+                    return result;
+                });
+
+                // Add new unique following to our list
+                for (const followedUser of newFollowing) {
+                    if (!following.includes(followedUser) && following.length < maxFollowing) {
+                        following.push(followedUser);
+                        console.log(`Found following: ${followedUser}`);
+                    }
+                }
+
+                // Scroll the following modal - find the scrollable container
+                const scrollInfo = await page.evaluate(() => {
+                    const dialog = document.querySelector('div[role="dialog"]');
+                    if (!dialog) return { success: false, message: 'No dialog found' };
+                    
+                    // Find all divs inside the dialog and check which ones are scrollable
+                    const allDivs = dialog.querySelectorAll('div');
+                    let scrollableDiv: HTMLElement | null = null;
+                    
+                    for (const div of Array.from(allDivs)) {
+                        const style = window.getComputedStyle(div);
+                        const overflowY = style.overflowY;
+                        const scrollHeight = div.scrollHeight;
+                        const clientHeight = div.clientHeight;
+                        
+                        // Check if this div is scrollable
+                        if ((overflowY === 'auto' || overflowY === 'scroll') && scrollHeight > clientHeight) {
+                            scrollableDiv = div as HTMLElement;
+                            break;
+                        }
+                    }
+                    
+                    if (scrollableDiv) {
+                        const beforeScroll = scrollableDiv.scrollTop;
+                        scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
+                        const afterScroll = scrollableDiv.scrollTop;
+                        
+                        return {
+                            success: true,
+                            message: 'Scrolled scrollableDiv',
+                            scrollHeight: scrollableDiv.scrollHeight,
+                            clientHeight: scrollableDiv.clientHeight,
+                            scrollTop: afterScroll,
+                            didScroll: afterScroll > beforeScroll
+                        };
+                    } else {
+                        // Fallback: try scrolling dialog
+                        dialog.scrollTop = dialog.scrollHeight;
+                        return {
+                            success: true,
+                            message: 'Scrolled dialog (fallback)',
+                            scrollHeight: dialog.scrollHeight,
+                            clientHeight: dialog.clientHeight,
+                            scrollTop: dialog.scrollTop,
+                            didScroll: false
+                        };
+                    }
+                });
+                
+                console.log(`DEBUG: Scroll info:`, JSON.stringify(scrollInfo, null, 2));
+
+                // Wait longer for Instagram to load more content
+                await delay(2000);
+
+                // Get the current scroll height
+                currentHeight = scrollInfo.scrollHeight || 0;
+                
+                console.log(`DEBUG: Previous height: ${previousHeight}, Current height: ${currentHeight}`);
+
+                if (currentHeight === previousHeight) {
+                    noChangeCount++;
+                    console.log(`Height unchanged (${noChangeCount}/${maxNoChangeAttempts}). Waiting for more content...`);
+                    
+                    if (noChangeCount >= maxNoChangeAttempts) {
+                        console.log("Reached the end of following list after multiple attempts");
+                        break;
+                    }
+                    
+                    // Wait extra time for Instagram to load more data
+                    await delay(3000);
+                } else {
+                    noChangeCount = 0; // Reset counter when height changes
+                    previousHeight = currentHeight;
+                }
+            }
+
+            console.log(`Successfully scraped ${following.length} following`);
+            return following;
+        } catch (error) {
+            console.error(`Error scraping following list:`, error);
+            throw error;
+        }
+    }
+
+    async deleteComment(postUrl: string, commentText: string) {
+        if (!this.page) throw new Error("Page not initialized");
+        const page = this.page;
+        try {
+            console.log(`Navigating to post: ${postUrl}`);
+            await page.goto(postUrl, { waitUntil: "networkidle2" });
+            await delay(2000);
+
+            // Find the comment with the matching text
+            const commentFound = await page.evaluate((searchText: string) => {
+                const commentElements = document.querySelectorAll('span');
+                for (const element of Array.from(commentElements)) {
+                    if (element.textContent?.trim() === searchText) {
+                        // Find the parent comment container
+                        let parent = element.parentElement;
+                        while (parent && !parent.querySelector('button[aria-label*="More"]')) {
+                            parent = parent.parentElement;
+                        }
+                        if (parent) {
+                            const moreButton = parent.querySelector('button[aria-label*="More"]') as HTMLElement;
+                            if (moreButton) {
+                                moreButton.click();
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }, commentText);
+
+            if (!commentFound) {
+                throw new Error(`Comment not found: ${commentText}`);
+            }
+
+            // Wait for the menu to appear and click delete
+            await delay(1000);
+            const deleteButton = await page.evaluateHandle(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                return buttons.find(button => 
+                    button.textContent?.toLowerCase().includes('delete') ||
+                    button.textContent?.toLowerCase().includes('unfollow')
+                );
+            });
+
+            if (deleteButton && deleteButton.asElement) {
+                const deleteButtonElement = deleteButton.asElement();
+                if (deleteButtonElement) {
+                    await (deleteButtonElement as puppeteer.ElementHandle<Element>).click();
+                    await delay(1000);
+
+                    // Confirm deletion if prompted
+                    const confirmButton = await page.evaluateHandle(() => {
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        return buttons.find(button => 
+                            button.textContent?.toLowerCase().includes('delete')
+                        );
+                    });
+
+                    if (confirmButton && confirmButton.asElement) {
+                        const confirmButtonElement = confirmButton.asElement();
+                        if (confirmButtonElement) {
+                            await (confirmButtonElement as puppeteer.ElementHandle<Element>).click();
+                            await delay(1000);
+                        }
+                    }
+                }
+            }
+
+            console.log(`Successfully deleted comment: ${commentText}`);
+        } catch (error) {
+            console.error(`Error deleting comment:`, error);
+            throw error;
+        }
+    }
+
+    async followUser(username: string): Promise<boolean> {
+        if (!this.page) throw new Error("Page not initialized");
+        const page = this.page;
+        
+        try {
+            logger.info(`Attempting to follow @${username}`);
+            
+            // Navigate to user's profile
+            await page.goto(`https://www.instagram.com/${username}/`, {
+                waitUntil: "networkidle2",
+            });
+            await delay(2000);
+
+            // Find and click the Follow button
+            const followButtonClicked = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                for (const button of buttons) {
+                    const text = button.textContent?.trim();
+                    if (text === 'Follow' || text === 'Follow Back') {
+                        button.click();
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            if (followButtonClicked) {
+                await delay(2000);
+                logger.info(`✓ Successfully followed @${username}`);
+                return true;
+            } else {
+                logger.warn(`Follow button not found for @${username} (might already be following)`);
+                return false;
+            }
+        } catch (error) {
+            logger.error(`Failed to follow @${username}:`, error);
+            throw error;
+        }
+    }
+
+    async unfollowUser(username: string): Promise<boolean> {
+        if (!this.page) throw new Error("Page not initialized");
+        const page = this.page;
+        
+        try {
+            logger.info(`Attempting to unfollow @${username}`);
+            
+            // Navigate to user's profile
+            await page.goto(`https://www.instagram.com/${username}/`, {
+                waitUntil: "networkidle2",
+            });
+            await delay(2000);
+
+            // Find and click the Following button
+            const followingButtonClicked = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                for (const button of buttons) {
+                    const text = button.textContent?.trim();
+                    if (text === 'Following' || text === 'Requested') {
+                        button.click();
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            if (!followingButtonClicked) {
+                logger.warn(`Following button not found for @${username} (might not be following)`);
+                return false;
+            }
+
+            await delay(1500);
+
+            // Click Unfollow in the confirmation dialog
+            const unfollowConfirmed = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                for (const button of buttons) {
+                    const text = button.textContent?.trim();
+                    if (text === 'Unfollow') {
+                        button.click();
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            if (unfollowConfirmed) {
+                await delay(2000);
+                logger.info(`✓ Successfully unfollowed @${username}`);
+                return true;
+            } else {
+                logger.warn(`Unfollow confirmation not found for @${username}`);
+                return false;
+            }
+        } catch (error) {
+            logger.error(`Failed to unfollow @${username}:`, error);
+            throw error;
+        }
+    }
+
+    async checkIfUserFollowsBack(username: string): Promise<boolean> {
+        if (!this.page) throw new Error("Page not initialized");
+        const page = this.page;
+        
+        try {
+            // Navigate to user's profile
+            await page.goto(`https://www.instagram.com/${username}/`, {
+                waitUntil: "networkidle2",
+            });
+            await delay(1500);
+
+            // Check if "Follows you" badge is present
+            const followsBack = await page.evaluate(() => {
+                const elements = Array.from(document.querySelectorAll('span, div'));
+                for (const element of elements) {
+                    const text = element.textContent?.trim();
+                    if (text === 'Follows you' || text === 'Follows You') {
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            return followsBack;
+        } catch (error) {
+            logger.error(`Failed to check follow-back status for @${username}:`, error);
+            return false;
         }
     }
 
@@ -459,7 +1143,7 @@ export class IgClient {
 }
 
 export async function scrapeFollowersHandler(targetAccount: string, maxFollowers: number) {
-    const client = new IgClient();
+    const client = new IgClient(IGusername, IGpassword);
     await client.init();
     const followers = await client.scrapeFollowers(targetAccount, maxFollowers);
     await client.close();

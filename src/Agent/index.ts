@@ -94,6 +94,17 @@ export function chooseCharacter(): any {
       : path.join(process.cwd(), "src", "Agent", "characters");
   })();
 
+  // Prefer company character for professional Instagram automation
+  const preferredFile = "company.character.json";
+  const preferredPath = path.join(charactersDir, preferredFile);
+  
+  if (fs.existsSync(preferredPath)) {
+    logger.info(`Using professional company character: ${preferredFile}`);
+    const data = fs.readFileSync(preferredPath, "utf8");
+    return JSON.parse(data);
+  }
+
+  // Fallback to first available character
   const files = fs.readdirSync(charactersDir);
   const jsonFiles = files.filter((file) => file.endsWith(".json"));
   if (jsonFiles.length === 0) {
