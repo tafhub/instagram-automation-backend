@@ -68,3 +68,4 @@ followedUserSchema.index({ followedBack: 1, unfollowedAt: 1 });
 export const FollowedUser = mongoose.model<IFollowedUser>('FollowedUser', followedUserSchema);
 
 
+
