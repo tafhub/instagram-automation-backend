@@ -10,7 +10,13 @@
     "train:youtube": "tsc && node build/Agent/training/youtubeURL.js",
     "build:frontend": "cd frontend && npm run build",
     "dev:frontend": "cd frontend && npm run dev",
-    "build:all": "npm run build:frontend && npx tsc && npm run postbuild"
+    "build:all": "npm run build:frontend && npx tsc && npm run postbuild",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop instagram-automation",
+    "pm2:restart": "pm2 restart instagram-automation",
+    "pm2:delete": "pm2 delete instagram-automation",
+    "pm2:logs": "pm2 logs instagram-automation",
+    "pm2:status": "pm2 status"
   },
   "keywords": [],
   "author": "",
