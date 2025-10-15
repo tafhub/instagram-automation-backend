@@ -46,13 +46,25 @@ app.use(session({
 }));
 
 // Serve static files from the 'frontend/dist' directory
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
+const frontendPath = path.resolve(__dirname, '../frontend/dist');
+console.log('Serving frontend from:', frontendPath);
+
+// Check if the frontend path exists
+if (require('fs').existsSync(frontendPath)) {
+    console.log('Frontend path exists, serving static files');
+    app.use(express.static(frontendPath));
+} else {
+    console.log('Frontend path does not exist, using fallback');
+    app.use(express.static('frontend/dist'));
+}
 
 // API Routes
 app.use('/api', apiRoutes);
 
 app.get('*', (_req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+    const indexPath = path.resolve(__dirname, '../frontend/dist/index.html');
+    console.log('Serving index.html from:', indexPath);
+    res.sendFile(indexPath);
 });
 
 /*
