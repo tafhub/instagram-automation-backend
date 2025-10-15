@@ -39,8 +39,8 @@ app.use(cors({
     origin: [
         'http://localhost:5173', // Local development
         'https://*.vercel.app', // Vercel deployments
-        'https://instagram-automation-frontend.vercel.app', // Your specific Vercel URL
-        process.env.FRONTEND_URL || 'https://instagram-automation-frontend.vercel.app'
+        'https://instagram-automation-three.vercel.app', // Your specific Vercel URL
+        process.env.FRONTEND_URL || 'https://instagram-automation-three.vercel.app'
     ],
     credentials: true, // Allow cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
