@@ -1,6 +1,7 @@
 // Use environment variable for API base URL, fallback to VPS for production
 // Updated to point to VPS backend for proper API communication
-const API_BASE = import.meta.env.VITE_API_URL || 'http://147.93.126.228:3001/api';
+// Note: Using HTTPS to avoid mixed content issues with Vercel HTTPS frontend
+const API_BASE = import.meta.env.VITE_API_URL || 'https://147.93.126.228/api';
 
 export interface LoginRequest {
   username: string;
