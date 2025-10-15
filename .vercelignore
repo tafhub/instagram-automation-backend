@@ -1,0 +1,6 @@
+# Ignore everything except the frontend folder for Vercel deployment
+*
+!frontend/
+!frontend/**
+!package.json
+!package-lock.json
