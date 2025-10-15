@@ -34,7 +34,18 @@ app.use(helmet({
         },
     },
 }));
-app.use(cors());
+// Configure CORS for Vercel deployment
+app.use(cors({
+    origin: [
+        'http://localhost:5173', // Local development
+        'https://*.vercel.app', // Vercel deployments
+        'https://instagram-automation-frontend.vercel.app', // Your specific Vercel URL
+        process.env.FRONTEND_URL || 'https://instagram-automation-frontend.vercel.app'
+    ],
+    credentials: true, // Allow cookies
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json()); // JSON body parsing
 app.use(express.urlencoded({ extended: true, limit: "1kb" })); // URL-encoded data
 app.use(cookieParser()); // Cookie parsing
@@ -45,26 +56,17 @@ app.use(session({
   cookie: { maxAge: 2 * 60 * 60 * 1000, sameSite: 'lax' },
 }));
 
-// Serve static files from the 'frontend/dist' directory
-const frontendPath = path.resolve(__dirname, '../frontend/dist');
-console.log('Serving frontend from:', frontendPath);
-
-// Check if the frontend path exists
-if (require('fs').existsSync(frontendPath)) {
-    console.log('Frontend path exists, serving static files');
-    app.use(express.static(frontendPath));
-} else {
-    console.log('Frontend path does not exist, using fallback');
-    app.use(express.static('frontend/dist'));
-}
-
-// API Routes
+// API Routes only - frontend is served by Vercel
 app.use('/api', apiRoutes);
 
+// Health check endpoint
+app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Catch all other routes and return 404 (frontend will handle routing)
 app.get('*', (_req, res) => {
-    const indexPath = path.resolve(__dirname, '../frontend/dist/index.html');
-    console.log('Serving index.html from:', indexPath);
-    res.sendFile(indexPath);
+    res.status(404).json({ error: 'Not found - API endpoint only' });
 });
 
 /*
