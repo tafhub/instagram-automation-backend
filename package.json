@@ -24,7 +24,7 @@
   "description": "Riona-AI-Agent is an AI-powered automation tool designed to interact with various social media platforms.",
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "axios": "^1.7.9",
+    "axios": "^1.12.0",
     "cookie-parser": "^1.4.6",
     "copyfiles": "^2.4.1",
     "cors": "^2.8.5",
@@ -33,7 +33,7 @@
     "dompurify": "^3.2.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "express-session": "^1.17.3",
+    "express-session": "^1.18.2",
     "helmet": "^8.0.0",
     "instagram-private-api": "^1.46.1",
     "jsdom": "^26.0.0",
