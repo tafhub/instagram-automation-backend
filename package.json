@@ -19,8 +19,6 @@
     "pm2:delete": "pm2 delete all",
     "pm2:logs": "pm2 logs",
     "pm2:logs:backend": "pm2 logs instagram-automation-backend",
-    "pm2:logs:frontend": "pm2 logs instagram-automation-frontend",
-    "pm2:logs:local": "pm2 logs instagram-automation-local",
     "pm2:status": "pm2 status"
   },
   "keywords": [],
