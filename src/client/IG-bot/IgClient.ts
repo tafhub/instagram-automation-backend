@@ -38,11 +38,6 @@ export class IgClient {
     }
 
     async init() {
-        // const server = new Server({ port: 8000 });
-        // await server.listen();
-        // const proxyUrl = server.getProxyUrl();
-        // logger.info(`Using proxy URL: ${proxyUrl}`);
-
         // Center the window on a 1920x1080 screen
         const width = 1280;
         const height = 800;
@@ -50,25 +45,27 @@ export class IgClient {
         const screenHeight = 1080;
         const left = Math.floor((screenWidth - width) / 2);
         const top = Math.floor((screenHeight - height) / 2);
-        // Check if we're running on a server (no display) or locally
-        const isServer = !process.env.DISPLAY && process.env.NODE_ENV === 'production';
-        logger.info(`Launching browser in ${isServer ? 'headless' : 'visible'} mode`);
         
-        this.browser = await puppeteerExtra.launch({
-            headless: isServer, // Run headless on server, visible locally
-            args: [
-                `--window-size=${width},${height}`,
-                `--window-position=${left},${top}`,
-                '--no-sandbox', // Required for running in containers/servers
-                '--disable-setuid-sandbox', // Required for running in containers/servers
-                '--disable-dev-shm-usage', // Overcome limited resource problems
-                '--disable-gpu', // Disable GPU acceleration
-                '--disable-extensions', // Disable extensions
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
-            ],
-        });
+        // Check if we should connect to a remote Chrome instance
+        const remoteChromeUrl = process.env.REMOTE_CHROME_URL; // e.g., "http://YOUR_LOCAL_IP:9222"
+        
+        if (remoteChromeUrl) {
+            logger.info(`Connecting to remote Chrome at ${remoteChromeUrl}`);
+            try {
+                this.browser = await puppeteerExtra.connect({
+                    browserURL: remoteChromeUrl,
+                    defaultViewport: { width, height }
+                });
+                logger.info("Successfully connected to remote Chrome");
+            } catch (error) {
+                logger.error("Failed to connect to remote Chrome:", error);
+                logger.info("Falling back to local browser launch...");
+                await this.launchLocalBrowser(width, height, left, top);
+            }
+        } else {
+            await this.launchLocalBrowser(width, height, left, top);
+        }
+        
         this.page = await this.browser.newPage();
         const userAgent = new UserAgent({ deviceCategory: "desktop" });
         await this.page.setUserAgent(userAgent.toString());
@@ -79,6 +76,70 @@ export class IgClient {
         } else {
             await this.loginWithCredentials();
         }
+    }
+
+    private async launchLocalBrowser(width: number, height: number, left: number, top: number) {
+        // Check if we're running on a server (no display) or locally
+        // Allow override with FORCE_HEADLESS environment variable
+        const forceHeadless = process.env.FORCE_HEADLESS === 'true';
+        const isServer = !process.env.DISPLAY && process.env.NODE_ENV === 'production';
+        const shouldRunHeadless = forceHeadless || isServer;
+        
+        logger.info(`Launching local browser in ${shouldRunHeadless ? 'headless' : 'visible'} mode`);
+        
+        // Production-ready Chrome arguments
+        const chromeArgs = [
+            `--window-size=${width},${height}`,
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor',
+            '--disable-ipc-flooding-protection',
+            '--disable-hang-monitor',
+            '--disable-prompt-on-repost',
+            '--disable-sync',
+            '--disable-translate',
+            '--disable-logging',
+            '--disable-permissions-api',
+            '--disable-background-networking',
+            '--disable-default-apps',
+            '--disable-domain-reliability',
+            '--disable-client-side-phishing-detection',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+            '--force-color-profile=srgb',
+            '--metrics-recording-only',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            '--enable-automation',
+            '--password-store=basic',
+            '--use-mock-keychain'
+        ];
+
+        // Add display argument if running on server with virtual display
+        if (shouldRunHeadless && process.env.NODE_ENV === 'production') {
+            chromeArgs.push('--display=:99'); // Use virtual display
+            logger.info('Using virtual display :99 for headless mode');
+        } else if (!shouldRunHeadless) {
+            // Only add window positioning for visible mode
+            chromeArgs.push(`--window-position=${left},${top}`);
+        }
+        
+        this.browser = await puppeteerExtra.launch({
+            headless: shouldRunHeadless,
+            args: chromeArgs,
+            ignoreDefaultArgs: ['--disable-extensions'],
+        });
     }
 
     private async loginWithCookies() {

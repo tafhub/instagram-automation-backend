@@ -28,9 +28,9 @@ cd frontend
 npm install
 cd ..
 
-# Install Chrome dependencies for Puppeteer (required for Instagram automation)
-chmod +x setup-server.sh
-sudo ./setup-server.sh
+# Install Chrome dependencies and virtual display for Puppeteer (required for Instagram automation)
+chmod +x setup-production.sh
+sudo ./setup-production.sh
 ```
 
 ### 3. Configure Environment Variables
@@ -79,6 +79,8 @@ This command will:
 #### Option A: Direct Node (for testing)
 
 ```bash
+# Set the virtual display environment variable
+export DISPLAY=:99
 npm run start
 ```
 
