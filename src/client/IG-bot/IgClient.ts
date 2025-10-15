@@ -66,7 +66,14 @@ export class IgClient {
             await this.launchLocalBrowser(width, height, left, top);
         }
         
-        this.page = await this.browser.newPage();
+        if (!this.browser) {
+            throw new Error("Failed to launch or connect to a browser instance");
+        }
+
+        this.page = await this.browser!.newPage();
+        if (!this.page) {
+            throw new Error("Unable to create a new page in the browser");
+        }
         const userAgent = new UserAgent({ deviceCategory: "desktop" });
         await this.page.setUserAgent(userAgent.toString());
         await this.page.setViewport({ width, height });
