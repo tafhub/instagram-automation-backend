@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import helmet from "helmet"; // For securing HTTP headers
 import cors from "cors";
 import session from 'express-session';
+import path from 'path';
 
 import logger, { setupErrorHandlers } from "./config/logger";
 import { setup_HandleError } from "./utils";
@@ -44,14 +45,14 @@ app.use(session({
   cookie: { maxAge: 2 * 60 * 60 * 1000, sameSite: 'lax' },
 }));
 
-// Serve static files from the 'public' directory
-app.use(express.static('frontend/dist'));
+// Serve static files from the 'frontend/dist' directory
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 // API Routes
 app.use('/api', apiRoutes);
 
 app.get('*', (_req, res) => {
-    res.sendFile('index.html', { root: 'frontend/dist' });
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 /*
