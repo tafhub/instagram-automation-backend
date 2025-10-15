@@ -2,7 +2,12 @@
 // Updated to point to VPS backend for proper API communication
 // Note: Using HTTPS to avoid mixed content issues with Vercel HTTPS frontend
 // Force Vercel redeploy with HTTPS backend URL
+// Force redeploy - HTTPS backend URL
 const API_BASE = import.meta.env.VITE_API_URL || 'https://147.93.126.228/api';
+
+// Debug: Log the API_BASE to console to see what's being used
+console.log('API_BASE:', API_BASE);
+console.log('VITE_API_URL env var:', import.meta.env.VITE_API_URL);
 
 export interface LoginRequest {
   username: string;
