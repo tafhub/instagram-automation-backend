@@ -27,6 +27,10 @@ npm install
 cd frontend
 npm install
 cd ..
+
+# Install Chrome dependencies for Puppeteer (required for Instagram automation)
+chmod +x setup-server.sh
+sudo ./setup-server.sh
 ```
 
 ### 3. Configure Environment Variables

@@ -50,11 +50,23 @@ export class IgClient {
         const screenHeight = 1080;
         const left = Math.floor((screenWidth - width) / 2);
         const top = Math.floor((screenHeight - height) / 2);
+        // Check if we're running on a server (no display) or locally
+        const isServer = !process.env.DISPLAY && process.env.NODE_ENV === 'production';
+        logger.info(`Launching browser in ${isServer ? 'headless' : 'visible'} mode`);
+        
         this.browser = await puppeteerExtra.launch({
-            headless: false,
+            headless: isServer, // Run headless on server, visible locally
             args: [
                 `--window-size=${width},${height}`,
-                `--window-position=${left},${top}`
+                `--window-position=${left},${top}`,
+                '--no-sandbox', // Required for running in containers/servers
+                '--disable-setuid-sandbox', // Required for running in containers/servers
+                '--disable-dev-shm-usage', // Overcome limited resource problems
+                '--disable-gpu', // Disable GPU acceleration
+                '--disable-extensions', // Disable extensions
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ],
         });
         this.page = await this.browser.newPage();
