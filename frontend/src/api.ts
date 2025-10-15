@@ -1,4 +1,5 @@
-const API_BASE = '/api';
+// Use environment variable for API base URL, fallback to VPS for production
+const API_BASE = import.meta.env.VITE_API_URL || 'http://147.93.126.228:3001/api';
 
 export interface LoginRequest {
   username: string;
