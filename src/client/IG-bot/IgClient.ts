@@ -43,6 +43,9 @@ export class IgClient {
         // const proxyUrl = server.getProxyUrl();
         // logger.info(`Using proxy URL: ${proxyUrl}`);
 
+        // Check if running in production (deployed environment)
+        const isProduction = process.env.NODE_ENV === 'production';
+        
         // Center the window on a 1920x1080 screen
         const width = 1280;
         const height = 800;
@@ -50,13 +53,33 @@ export class IgClient {
         const screenHeight = 1080;
         const left = Math.floor((screenWidth - width) / 2);
         const top = Math.floor((screenHeight - height) / 2);
-        this.browser = await puppeteerExtra.launch({
-            headless: false,
+        
+        // Configure browser launch options based on environment
+        const launchOptions: any = {
+            headless: isProduction ? false : false, // Keep false for both to show browser
             args: [
                 `--window-size=${width},${height}`,
-                `--window-position=${left},${top}`
-            ],
-        });
+                `--window-position=${left},${top}`,
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu'
+            ]
+        };
+
+        // Add virtual display configuration for production
+        if (isProduction) {
+            launchOptions.args.push(
+                '--display=:1', // Use virtual display :1 (VNC display)
+                '--remote-debugging-port=9222'
+            );
+        }
+
+        this.browser = await puppeteerExtra.launch(launchOptions);
         this.page = await this.browser.newPage();
         const userAgent = new UserAgent({ deviceCategory: "desktop" });
         await this.page.setUserAgent(userAgent.toString());

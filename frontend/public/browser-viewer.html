@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riona AI Agent - Browser Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+            max-width: 1200px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .browser-viewer {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            min-height: 600px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .browser-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 10px;
+        }
+
+        .loading {
+            color: white;
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            box-shadow: 0 10px 20px rgba(108, 117, 125, 0.3);
+        }
+
+        .info-panel {
+            background: #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .info-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .info-panel ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-panel li {
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .info-panel li:last-child {
+            border-bottom: none;
+        }
+
+        .info-panel strong {
+            color: #495057;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .browser-viewer {
+                min-height: 400px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Riona AI Agent</h1>
+            <p>Live Browser Session Viewer</p>
+        </div>
+
+        <div class="status-card">
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <strong>Browser Session Active</strong>
+            </div>
+            <p>You can now watch the Instagram automation in real-time. The browser will show all actions being performed by the AI agent.</p>
+        </div>
+
+        <div class="browser-viewer" id="browserViewer">
+            <div class="loading" id="loadingMessage">
+                <div class="spinner"></div>
+                <p>Connecting to browser session...</p>
+            </div>
+            <iframe id="browserFrame" class="browser-frame" style="display: none;"></iframe>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="refreshBrowser()">🔄 Refresh Browser</button>
+            <button class="btn btn-secondary" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+            <a href="/" class="btn btn-secondary">🏠 Back to Dashboard</a>
+        </div>
+
+        <div class="info-panel">
+            <h3>📋 Session Information</h3>
+            <ul>
+                <li><strong>Platform:</strong> Instagram</li>
+                <li><strong>Status:</strong> <span id="sessionStatus">Active</span></li>
+                <li><strong>Started:</strong> <span id="sessionStart">Just now</span></li>
+                <li><strong>Actions:</strong> <span id="actionCount">0</span> completed</li>
+                <li><strong>Connection:</strong> <span id="connectionStatus">Connected</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let isConnected = false;
+        let actionCount = 0;
+        let sessionStartTime = new Date();
+
+        // Update session start time
+        document.getElementById('sessionStart').textContent = sessionStartTime.toLocaleTimeString();
+
+        // Function to refresh the browser view
+        function refreshBrowser() {
+            const frame = document.getElementById('browserFrame');
+            const loading = document.getElementById('loadingMessage');
+            
+            loading.style.display = 'block';
+            frame.style.display = 'none';
+            
+            // Simulate connection delay
+            setTimeout(() => {
+                connectToBrowser();
+            }, 1000);
+        }
+
+        // Function to connect to the browser session
+        function connectToBrowser() {
+            const frame = document.getElementById('browserFrame');
+            const loading = document.getElementById('loadingMessage');
+            
+            // Get the server's VNC port (adjust as needed)
+            const vncPort = window.location.port || '6080';
+            const serverHost = window.location.hostname;
+            
+            // Try to connect to noVNC
+            const vncUrl = `http://${serverHost}:${vncPort}/vnc.html?autoconnect=true&password=&resize=scale&reconnect=true`;
+            
+            frame.src = vncUrl;
+            
+            frame.onload = function() {
+                loading.style.display = 'none';
+                frame.style.display = 'block';
+                isConnected = true;
+                updateConnectionStatus('Connected');
+            };
+            
+            frame.onerror = function() {
+                loading.innerHTML = `
+                    <div class="error-message">
+                        <h3>⚠️ Connection Error</h3>
+                        <p>Unable to connect to browser session. Please check:</p>
+                        <ul style="text-align: left; margin-top: 10px;">
+                            <li>VNC server is running on port 6080</li>
+                            <li>Firewall allows connections on port 6080</li>
+                            <li>Browser session is active</li>
+                        </ul>
+                        <p style="margin-top: 15px;">
+                            <strong>Manual VNC URL:</strong><br>
+                            <code style="background: #f8f9fa; padding: 5px; border-radius: 3px;">${vncUrl}</code>
+                        </p>
+                    </div>
+                `;
+                isConnected = false;
+                updateConnectionStatus('Disconnected');
+            };
+        }
+
+        // Function to update connection status
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = status;
+            statusElement.style.color = status === 'Connected' ? '#28a745' : '#dc3545';
+        }
+
+        // Function to toggle fullscreen
+        function toggleFullscreen() {
+            const viewer = document.getElementById('browserViewer');
+            if (!document.fullscreenElement) {
+                viewer.requestFullscreen().catch(err => {
+                    console.log('Error attempting to enable fullscreen:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Function to update action count
+        function updateActionCount() {
+            actionCount++;
+            document.getElementById('actionCount').textContent = actionCount;
+        }
+
+        // Simulate action updates (replace with real WebSocket connection)
+        setInterval(() => {
+            if (isConnected && Math.random() > 0.7) {
+                updateActionCount();
+            }
+        }, 5000);
+
+        // Initialize connection
+        window.addEventListener('load', () => {
+            setTimeout(connectToBrowser, 1000);
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && !isConnected) {
+                refreshBrowser();
+            }
+        });
+
+        // Auto-refresh every 30 seconds to maintain connection
+        setInterval(() => {
+            if (isConnected) {
+                refreshBrowser();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
+

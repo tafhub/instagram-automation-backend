@@ -47,6 +47,9 @@ app.use(session({
 // Serve static files from the 'public' directory
 app.use(express.static('frontend/dist'));
 
+// Serve browser viewer static files
+app.use('/browser-viewer', express.static('frontend/public'));
+
 // API Routes
 app.use('/api', apiRoutes);
 
